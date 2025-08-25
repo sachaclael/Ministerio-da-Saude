@@ -1,0 +1,95 @@
+from pysus.online_data.SIA import download
+import pandas as pd
+from datetime import datetime
+import os
+import re
+
+# Escolha da UF, ano e mês
+UF = 'MG'  # Exemplo: 'SP', 'DF', 'MG'...
+ANO = 2025  # Ano desejado
+MES = 4  # Mês desejado (1-12)
+
+# Grupo do SIA a ser baixado
+GRUPO = 'PA'  # Exemplo: 'PA', 'RD', 'AD', etc.
+
+# Lista bruta de procedimentos
+procedimentos_raw = '''0211070025|0211070033|0211070041|0211070076|0211070157
+0211070203|0211070211|0211070246|0211070262|0211070378|0211070386|0211070394
+0211070408|0211070416|0301070016|0301070113|0301070172|0301070180|0301070199
+0404010148|0404010571|0404010580|0404010598|0404010601|0404010610|0404010628
+0404010636|0404010644|0404010652|0701030348|0701090103|0701090111|0701090120
+0701090138|0701090146|0701090154|0701090162|0701090170|0701090189|0701090197
+0701090200|0701090219|0701090227|0701090235|0702090034|0702090050|0702090069
+0702090077|0702090085|0702090093'''
+
+# Extrai os códigos (apenas dígitos)
+procedimentos = set(re.findall(r"\d{10}", procedimentos_raw))
+
+# Pasta de saída
+hoje = datetime.now()
+pasta_saida = f"SIA_{UF}_{GRUPO}_{ANO}{MES:02d}_{hoje.strftime('%Y%m%d_%H%M%S')}"
+os.makedirs(pasta_saida, exist_ok=True)
+
+# Log
+log_filename = os.path.join(pasta_saida, f"log_download_{hoje.strftime('%Y%m%d_%H%M%S')}.txt")
+
+
+def escreve_log(mensagem):
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open(log_filename, "a", encoding='utf-8') as log_file:
+        log_file.write(f"[{timestamp}] {mensagem}\n")
+    print(f"[{timestamp}] {mensagem}")
+
+
+escreve_log(f"Início do download SIA para {MES:02d}/{ANO} UF={UF} grupo={GRUPO}")
+
+# DataFrame final acumulado
+df_final = pd.DataFrame()
+
+try:
+    sia_obj = download(UF, ANO, MES, GRUPO)
+    # Alguns grupos retornam lista de ParquetSet
+    if isinstance(sia_obj, list):
+        df_list = [df.to_dataframe() for df in sia_obj]
+        df = pd.concat(df_list, ignore_index=True)
+    else:
+        df = sia_obj.to_dataframe()
+
+    # Normalizar colunas
+    cols_map = {c.upper(): c for c in df.columns}
+
+    # Procurar coluna de procedimento
+    proc_col = None
+    if 'PROC_REA' in cols_map:
+        proc_col = cols_map['PROC_REA']
+    elif 'PROC_SOLIC' in cols_map:
+        proc_col = cols_map['PROC_SOLIC']
+    else:
+        candidates = [orig for up, orig in cols_map.items() if 'PROC' in up]
+        if candidates:
+            proc_col = candidates[0]
+
+    if not proc_col:
+        escreve_log(f"Nenhuma coluna de procedimento encontrada no grupo {GRUPO}. Pulando...")
+    else:
+        df[proc_col] = df[proc_col].astype(str).str.strip()
+        df_filtrado = df[df[proc_col].isin(procedimentos)].copy()
+
+        if df_filtrado.empty:
+            escreve_log(f"Nenhum registro corresponde aos procedimentos informados.")
+        else:
+            df_final = pd.concat([df_final, df_filtrado], ignore_index=True)
+            escreve_log(f"Dados filtrados. Registros: {len(df_filtrado)}")
+
+except Exception as e:
+    escreve_log(f"Erro ao baixar/processar grupo {GRUPO}: {e}")
+
+# Salvar Excel final
+if not df_final.empty:
+    arquivo_saida = os.path.join(pasta_saida, f"SIA_{UF}_{GRUPO}_{ANO}{MES:02d}_procedimentos_filtrados.xlsx")
+    df_final.to_excel(arquivo_saida, index=False)
+    escreve_log(f"Download finalizado. Arquivo Excel salvo: {arquivo_saida}")
+else:
+    escreve_log("Nenhum dado disponível para os procedimentos selecionados.")
+
+escreve_log("Script finalizado.")
