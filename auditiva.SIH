@@ -45,7 +45,7 @@ escreve_log("Início do processo de download do SIH.")
 # 2. Download apenas do mês/ano escolhido
 try:
     escreve_log(f"Iniciando download de {MES:02d}/{ANO} para UF={UF}...")
-    sih_obj = download(UF, ANO, MES, "RD")
+    sih_obj = download(UF, ANO, MES, "RD", "SP")
     dados = sih_obj.to_dataframe()
 
     # Mapear colunas
