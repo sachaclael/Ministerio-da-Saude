@@ -5,10 +5,7 @@ import os
 import re
 
 # --------------- CONFIGURAÇÃO ---------------
-# UF desejada (pode trocar por "SP", "RJ", etc.)
 UF = ['ac','al','ap','am','ba','ce','df','es','go','ma','mt','ms','mg','pa','pb','pr','pe','pi','rj','rn','rs','ro','rr','sc','sp','se','to']
-
-# Ano e mês desejados
 ANO = 2025
 MES = 4
 
@@ -22,9 +19,7 @@ procedimentos_raw = '''0211070025|0211070033|0211070041|0211070076|0211070157
 0701090200|0701090219|0701090227|0701090235|0702090034|0702090050|0702090069
 0702090077|0702090085|0702090093'''
 
-# Extrair somente os códigos (10 dígitos)
 procedimentos = set(re.findall(r"\d{10}", procedimentos_raw))
-
 # --------------- FIM CONFIGURAÇÃO ---------------
 
 # 1. Pasta de saída e log
@@ -42,11 +37,18 @@ def escreve_log(msg):
 
 escreve_log("Início do processo de download do SIH.")
 
-# 2. Download apenas do mês/ano escolhido
+# 2. Download RD e SP separadamente e juntar
+def baixa_grupo(grupo):
+    escreve_log(f"Iniciando download de {MES:02d}/{ANO} para UF={UF}, grupo={grupo}...")
+    sih_obj = download(UF, ANO, MES, grupo)
+    return sih_obj.to_dataframe()
+
 try:
-    escreve_log(f"Iniciando download de {MES:02d}/{ANO} para UF={UF}...")
-    sih_obj = download(UF, ANO, MES, "RD", "SP")
-    dados = sih_obj.to_dataframe()
+    dados_rd = baixa_grupo("RD")
+    dados_sp = baixa_grupo("SP")
+
+    # Concatenar RD e SP
+    dados = pd.concat([dados_rd, dados_sp], ignore_index=True)
 
     # Mapear colunas
     cols_map = {c.upper(): c for c in dados.columns}
