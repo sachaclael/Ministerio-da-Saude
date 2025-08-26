@@ -7,8 +7,6 @@ import re
 # --------------- CONFIGURAÇÃO ---------------
 # UF desejada (pode trocar por "SP", "RJ", etc.)
 UF = ['ac','al','ap','am','ba','ce','df','es','go','ma','mt','ms','mg','pa','pb','pr','pe','pi','rj','rn','rs','ro','rr','sc','sp','se','to']
-
-# Ano e mês desejados
 ANO = 2025
 MES = 4
 
@@ -37,7 +35,6 @@ procedimentos_raw = '''0211060011|0211060020|0211060038|0211060054|0211060062
 
 # Extrair somente os códigos (10 dígitos)
 procedimentos = set(re.findall(r"\d{10}", procedimentos_raw))
-
 # --------------- FIM CONFIGURAÇÃO ---------------
 
 # 1. Pasta de saída e log
@@ -55,11 +52,18 @@ def escreve_log(msg):
 
 escreve_log("Início do processo de download do SIH.")
 
-# 2. Download apenas do mês/ano escolhido
+# 2. Download RD e SP separadamente e juntar
+def baixa_grupo(grupo):
+    escreve_log(f"Iniciando download de {MES:02d}/{ANO} para UF={UF}, grupo={grupo}...")
+    sih_obj = download(UF, ANO, MES, grupo)
+    return sih_obj.to_dataframe()
+
 try:
-    escreve_log(f"Iniciando download de {MES:02d}/{ANO} para UF={UF}...")
-    sih_obj = download(UF, ANO, MES, "RD", "SP")
-    dados = sih_obj.to_dataframe()
+    dados_rd = baixa_grupo("RD")
+    dados_sp = baixa_grupo("SP")
+
+    # Concatenar RD e SP
+    dados = pd.concat([dados_rd, dados_sp], ignore_index=True)
 
     # Mapear colunas
     cols_map = {c.upper(): c for c in dados.columns}
@@ -83,11 +87,11 @@ try:
 
         if dados_filtrados.empty:
             escreve_log("Nenhum registro encontrado com os procedimentos informados.")
-            dados.head(0).to_csv(os.path.join(pasta_saida, f"SIH_{UF}_{ANO}{MES:02d}_empty.csv"), index=False)
+            dados.head(0).to_excel(os.path.join(pasta_saida, f"SIH_{UF}_{ANO}{MES:02d}_empty.xlsx"), index=False)
         else:
-            caminho_csv = os.path.join(pasta_saida, f"SIH_{UF}_{ANO}{MES:02d}_procedimentos_filtrados.csv")
-            dados_filtrados.to_csv(caminho_csv, index=False)
-            escreve_log(f"Arquivo salvo: {caminho_csv} (registros: {len(dados_filtrados)})")
+            caminho_xlsx = os.path.join(pasta_saida, f"SIH_{UF}_{ANO}{MES:02d}_procedimentos_filtrados.xlsx")
+            dados_filtrados.to_excel(caminho_xlsx, index=False)
+            escreve_log(f"Arquivo salvo: {caminho_xlsx} (registros: {len(dados_filtrados)})")
 
 except Exception as e:
     escreve_log(f"Erro no download/processamento: {e}")
