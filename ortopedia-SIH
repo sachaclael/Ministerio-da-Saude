@@ -4,7 +4,7 @@ from datetime import datetime
 import os
 
 # --------------- CONFIGURAÇÃO ---------------
-UF = "MG"        # Estado
+UF = ['ac','al','ap','am','ba','ce','df','es','go','ma','mt','ms','mg','pa','pb','pr','pe','pi','rj','rn','rs','ro','rr','sc','sp','se','to']      # Estado
 ANO = 2025
 MES = 4
 
