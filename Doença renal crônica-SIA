@@ -1,0 +1,80 @@
+from pysus.online_data.SIA import download
+import pandas as pd
+from datetime import datetime
+import os
+import re
+
+# --------------- CONFIGURAÇÃO ---------------
+UF = "MG"
+ANO = 2025
+MES = 4
+
+# Lista de procedimentos que você pode alterar facilmente
+PROC_DESEJADOS = [
+    "0301130051", "0301130060", "0305010018", "0305010026", "0305010093",
+    "0305010107", "0305010115", "0305010123", "0305010166", "0305010182",
+    "0305010204", "0418010013", "0418010021", "0418010030", "0418010048",
+    "0418010064", "0418010080", "0418010099", "0418020019", "0418020027",
+    "0418020035", "0702100013", "0702100021", "0702100030", "0702100048",
+    "0702100056", "0702100064", "0702100072", "0702100080", "0702100099",
+    "0702100102"
+]
+# --------------- FIM CONFIGURAÇÃO ---------------
+
+# Pasta de saída e log
+hoje = datetime.now()
+pasta_saida = f"SIA_{UF}_{ANO}{MES:02d}_{hoje.strftime('%Y%m%d_%H%M%S')}"
+os.makedirs(pasta_saida, exist_ok=True)
+log_filename = os.path.join(pasta_saida, "log_download.txt")
+
+def escreve_log(msg):
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open(log_filename, "a", encoding="utf-8") as f:
+        f.write(f"[{timestamp}] {msg}\n")
+    print(f"[{timestamp}] {msg}")
+
+escreve_log("Início do processo de download do SIA (PA).")
+
+try:
+    # Baixar Produção Ambulatorial
+    escreve_log(f"Baixando grupo PA para {MES:02d}/{ANO}, UF={UF}...")
+    arquivos = download(UF, ANO, MES, groups=["PA"])
+
+    dfs = []
+    for arquivo in arquivos:
+        try:
+            df = arquivo.to_dataframe()
+
+            # Normaliza coluna
+            df["PA_PROC_ID"] = df["PA_PROC_ID"].astype(str).str.strip()
+
+            # Filtro pelos procedimentos desejados
+            df_filtrado = df[df["PA_PROC_ID"].isin(PROC_DESEJADOS)]
+            dfs.append(df_filtrado)
+
+        except Exception as e:
+            escreve_log(f"Erro ao processar arquivo: {e}")
+
+    # Concatenar todos os arquivos filtrados
+    dados_filtrados = pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
+    escreve_log(f"Total de registros filtrados: {len(dados_filtrados)}")
+
+    # Exportar para Excel
+    if dados_filtrados.empty:
+        escreve_log("Nenhum registro encontrado com os filtros aplicados.")
+        dados_filtrados.head(0).to_excel(
+            os.path.join(pasta_saida, f"SIA_{UF}_{ANO}{MES:02d}_empty.xlsx"),
+            index=False
+        )
+    else:
+        caminho = os.path.join(
+            pasta_saida,
+            f"SIA_{UF}_{ANO}{MES:02d}_proc{len(PROC_DESEJADOS)}.xlsx"
+        )
+        dados_filtrados.to_excel(caminho, index=False)
+        escreve_log(f"Arquivo salvo: {caminho}")
+
+except Exception as e:
+    escreve_log(f"Erro geral no processamento: {e}")
+
+escreve_log("Script finalizado.")
