@@ -1,0 +1,78 @@
+from pysus.online_data.SIH import download
+import pandas as pd
+from datetime import datetime
+import os
+
+# --------------- CONFIGURAÇÃO ---------------
+UFS = ["MG"]   # lista de UFs desejadas
+ANOS = [2025]  # lista de anos
+MESES = [4]    # lista de meses
+
+# Lista de procedimentos alvo na coluna PROC_REA
+PROCEDIMENTOS = [
+    "0301120056", "0301120080", "0303070137",
+    "0407010122", "0407010173", "0407010181",
+    "0407010360", "0407010378", "0407010386",
+    "0413040054", "0413040062", "0413040070",
+    "0413040089", "0413040259", "0415020018"
+]
+# --------------- FIM CONFIGURAÇÃO ---------------
+
+# Criar pasta de saída e log
+hoje = datetime.now()
+pasta_saida = f"SIH_RD_{hoje.strftime('%Y%m%d_%H%M%S')}"
+os.makedirs(pasta_saida, exist_ok=True)
+log_filename = os.path.join(pasta_saida, "log_download.txt")
+
+def escreve_log(msg):
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open(log_filename, "a", encoding="utf-8") as f:
+        f.write(f"[{ts}] {msg}\n")
+    print(f"[{ts}] {msg}")
+
+escreve_log("Início do processo de download do SIH (RD).")
+
+# Loop pelas combinações de UF, ANO, MES
+todos_dados = []
+for UF in UFS:
+    for ANO in ANOS:
+        for MES in MESES:
+            try:
+                escreve_log(f"Baixando SIH RD para {UF}, {MES:02d}/{ANO}...")
+                sih_obj = download(UF, ANO, MES, "RD")
+                df = sih_obj.to_dataframe()
+                escreve_log(f"Registros lidos: {len(df)}")
+
+                # Normalizar colunas
+                df.columns = [c.upper() for c in df.columns]
+
+                if "PROC_REA" not in df.columns:
+                    escreve_log(f"Coluna 'PROC_REA' não encontrada. Colunas disponíveis: {list(df.columns)}")
+                    continue
+
+                # Normalizar e filtrar
+                df["PROC_REA"] = df["PROC_REA"].astype(str).str.strip()
+                df_filtrado = df[df["PROC_REA"].isin(PROCEDIMENTOS)].copy()
+                escreve_log(f"Filtragem PROC_REA: {len(df_filtrado)} registros encontrados.")
+
+                if not df_filtrado.empty:
+                    # adicionar colunas auxiliares de UF/ANO/MES
+                    df_filtrado["UF"] = UF
+                    df_filtrado["ANO"] = ANO
+                    df_filtrado["MES"] = MES
+                    todos_dados.append(df_filtrado)
+
+            except Exception as e:
+                escreve_log(f"Erro no download/processamento {UF}-{ANO}-{MES:02d}: {e}")
+
+# Concatenar todos os resultados em um único arquivo Excel
+if todos_dados:
+    resultado_final = pd.concat(todos_dados, ignore_index=True)
+    caminho_xlsx = os.path.join(pasta_saida, f"SIH_RD_procedimentos_filtrados.xlsx")
+    resultado_final.to_excel(caminho_xlsx, index=False)
+    escreve_log(f"Arquivo final salvo: {caminho_xlsx} (registros: {len(resultado_final)})")
+else:
+    escreve_log("Nenhum registro encontrado para os procedimentos informados.")
+    pd.DataFrame().to_excel(os.path.join(pasta_saida, "SIH_RD_empty.xlsx"), index=False)
+
+escreve_log("Script finalizado.")
