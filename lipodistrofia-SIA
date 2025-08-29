@@ -1,0 +1,82 @@
+from pysus.online_data.SIA import download
+import pandas as pd
+from datetime import datetime
+import os
+
+# --------------- CONFIGURAÇÃO ---------------
+UFS = ["MG"]   # <<<<< coloque as UFs desejadas aqui
+ANO = 2019           # <<<<< altere aqui
+MES = 1              # <<<<< altere aqui
+
+# >>>>> ALTERE SOMENTE ESTA LISTA QUANDO PRECISAR <<<<<
+PROC_DESEJADOS = [
+    "0413030016", "0413030024", "0413030032", "0413030040",
+    "0413030059", "0413030067", "0413030075", "0413030083",
+    "0702080020"
+]
+# --------------- FIM CONFIGURAÇÃO ---------------
+
+# Pasta de saída e log
+hoje = datetime.now()
+pasta_saida = f"SIA_{'_'.join(UFS)}_{ANO}{MES:02d}_{hoje.strftime('%Y%m%d_%H%M%S')}"
+os.makedirs(pasta_saida, exist_ok=True)
+log_filename = os.path.join(pasta_saida, "log_download.txt")
+
+def escreve_log(msg):
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open(log_filename, "a", encoding="utf-8") as f:
+        f.write(f"[{timestamp}] {msg}\n")
+    print(f"[{timestamp}] {msg}")
+
+escreve_log("Início do processo de download do SIA (PA).")
+
+try:
+    dfs = []
+
+    for UF in UFS:
+        escreve_log(f"--- Processando UF={UF} ---")
+
+        try:
+            arquivos = download(UF, ANO, MES, groups=["PA"])
+
+            # Garante que sempre seja lista
+            if not isinstance(arquivos, (list, tuple)):
+                arquivos = [arquivos]
+
+            for arquivo in arquivos:
+                df = arquivo.to_dataframe()
+                df["PA_PROC_ID"] = df["PA_PROC_ID"].astype(str).str.strip()
+
+                # Adiciona a coluna de UF para identificar a origem
+                df["UF"] = UF
+
+                # Filtra pelos procedimentos desejados
+                df_filtrado = df[df["PA_PROC_ID"].isin(PROC_DESEJADOS)]
+                dfs.append(df_filtrado)
+
+        except Exception as e:
+            escreve_log(f"Erro ao processar UF={UF}: {e}")
+
+    # Junta tudo em um único DataFrame
+    dados_filtrados = pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
+    escreve_log(f"Total geral de registros filtrados: {len(dados_filtrados)}")
+
+    # Exporta para Excel único
+    if dados_filtrados.empty:
+        escreve_log("Nenhum registro encontrado com os filtros aplicados.")
+        dados_filtrados.head(0).to_excel(
+            os.path.join(pasta_saida, f"SIA_{'_'.join(UFS)}_{ANO}{MES:02d}_empty.xlsx"),
+            index=False
+        )
+    else:
+        caminho = os.path.join(
+            pasta_saida,
+            f"SIA_{'_'.join(UFS)}_{ANO}{MES:02d}_consolidado.xlsx"
+        )
+        dados_filtrados.to_excel(caminho, index=False)
+        escreve_log(f"Arquivo salvo: {caminho}")
+
+except Exception as e:
+    escreve_log(f"Erro geral no processamento: {e}")
+
+escreve_log("Script finalizado.")
