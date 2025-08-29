@@ -1,0 +1,98 @@
+from pysus.online_data.SIH import download
+import pandas as pd
+from datetime import datetime
+import os
+
+# --------------- CONFIGURAÇÃO ---------------
+UF = "MG"        # Estado
+ANO = 2025
+MES = 4
+
+# Procedimentos principais (SP_PROCREA)
+procedimentos_principais = {"0415010012", "0415020077", "0415030013"}
+# Prefixo dos procedimentos que começam com 0403
+prefixo_0403 = "0403"
+# --------------- FIM CONFIGURAÇÃO ---------------
+
+# Pasta de saída e log
+hoje = datetime.now()
+pasta_saida = f"SIH_{UF}_{ANO}{MES:02d}_{hoje.strftime('%Y%m%d_%H%M%S')}"
+os.makedirs(pasta_saida, exist_ok=True)
+
+log_filename = os.path.join(pasta_saida, "log_download.txt")
+
+def escreve_log(msg):
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open(log_filename, "a", encoding="utf-8") as f:
+        f.write(f"[{timestamp}] {msg}\n")
+    print(f"[{timestamp}] {msg}")
+
+escreve_log("Início do processo de download do SIH.")
+
+# Função de processamento
+def processar(tipo):
+    try:
+        escreve_log(f"Iniciando download de {MES:02d}/{ANO} para UF={UF}, tipo={tipo}...")
+        sih_obj = download(UF, ANO, MES, tipo)
+        dados = sih_obj.to_dataframe()
+
+        # Normalizar nomes de colunas
+        dados.columns = [c.upper() for c in dados.columns]
+
+        # -------------------------
+        # Regras específicas por tipo
+        # -------------------------
+        if tipo == "SP":
+            col_proc = "SP_PROCREA"
+            col_sub = "SP_ATOPROF"
+
+            if col_proc not in dados.columns or col_sub not in dados.columns:
+                escreve_log(f"Colunas esperadas não encontradas no {tipo}: {list(dados.columns)}")
+                return
+
+            # Normalizar
+            dados[col_proc] = dados[col_proc].astype(str).str.strip()
+            dados[col_sub] = dados[col_sub].astype(str).str.strip()
+
+            # Filtro: SP_PROCREA fixos + SP_ATOPROF iniciando com 0403
+            dados_filtrados = dados[
+                dados[col_proc].isin(procedimentos_principais) &
+                dados[col_sub].str.startswith(prefixo_0403)
+            ]
+
+        elif tipo == "RD":
+            col_proc = "PROC_REA"
+
+            if col_proc not in dados.columns:
+                escreve_log(f"Coluna esperada não encontrada no {tipo}: {list(dados.columns)}")
+                return
+
+            # Normalizar
+            dados[col_proc] = dados[col_proc].astype(str).str.strip()
+
+            # Filtro: PROC_REA iniciando com 0403
+            dados_filtrados = dados[dados[col_proc].str.startswith(prefixo_0403)]
+
+        else:
+            escreve_log(f"Tipo {tipo} não reconhecido.")
+            return
+
+        # -------------------------
+        # Exportar
+        # -------------------------
+        if dados_filtrados.empty:
+            escreve_log(f"Nenhum registro encontrado para {tipo}.")
+            dados.head(0).to_excel(os.path.join(pasta_saida, f"SIH_{UF}_{ANO}{MES:02d}_{tipo}_empty.xlsx"), index=False)
+        else:
+            caminho_xlsx = os.path.join(pasta_saida, f"SIH_{UF}_{ANO}{MES:02d}_{tipo}_filtrado.xlsx")
+            dados_filtrados.to_excel(caminho_xlsx, index=False)
+            escreve_log(f"Arquivo salvo: {caminho_xlsx} (registros: {len(dados_filtrados)})")
+
+    except Exception as e:
+        escreve_log(f"Erro no download/processamento ({tipo}): {e}")
+
+# Rodar para RD e SP
+for tipo in ["RD", "SP"]:
+    processar(tipo)
+
+escreve_log("Script finalizado.")
