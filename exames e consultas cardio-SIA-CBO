@@ -4,7 +4,7 @@ from datetime import datetime
 import os
 
 # ---------------- CONFIGURAÇÃO ----------------
-# 👉 Edite aqui antes de rodar
+# Edite aqui antes de rodar
 UFS = ["MG"]   # Pode colocar 1 ou várias UFs
 ANO = 2023                 # Ano desejado
 MES = 1                    # Mês desejado (1 a 12)
