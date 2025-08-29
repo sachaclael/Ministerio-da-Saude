@@ -1,0 +1,96 @@
+from pysus.online_data.SIH import download
+import pandas as pd
+from datetime import datetime
+import os
+
+# --------------- CONFIGURAÇÃO ---------------
+UFS = ["MG"]               # lista de UFs
+ANOS = [2025]              # lista de anos
+MESES = [4]                # escolha manual dos meses (ex.: [4] ou [4, 8])
+
+# Procedimentos desejados
+PROC_DESEJADOS = [
+    "0413030016", "0413030024", "0413030032", "0413030040",
+    "0413030059", "0413030067", "0413030075", "0413030083",
+    "0702080020"
+]
+# --------------- FIM CONFIGURAÇÃO ---------------
+
+# Criar pasta de saída e arquivo de log
+hoje = datetime.now()
+pasta_saida = f"SIH_RD_{hoje.strftime('%Y%m%d_%H%M%S')}"
+os.makedirs(pasta_saida, exist_ok=True)
+log_filename = os.path.join(pasta_saida, "log_download.txt")
+
+def escreve_log(msg):
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open(log_filename, "a", encoding="utf-8") as f:
+        f.write(f"[{ts}] {msg}\n")
+    print(f"[{ts}] {msg}")
+
+escreve_log("Início do processo de download do SIH (RD).")
+
+# Garantir que a lista de procedimentos esteja como string sem espaços
+proc_desejados_str = [str(p).strip() for p in PROC_DESEJADOS]
+
+# Loop para cada combinação de UF, Ano, Mês
+for UF in UFS:
+    for ANO in ANOS:
+        for MES in MESES:
+            try:
+                escreve_log(f"Solicitando SIH RD para {MES:02d}/{ANO}, UF={UF}...")
+                sih_obj = download(UF, ANO, MES, "RD")
+
+                # Converter para DataFrame
+                df = sih_obj.to_dataframe()
+                escreve_log(f"Registros lidos: {len(df)}")
+
+                # Normaliza nomes das colunas
+                df.columns = [c.upper() for c in df.columns]
+
+                # Verifica se a coluna PROC_REA existe
+                if "PROC_REA" not in df.columns:
+                    escreve_log(f"Erro: coluna 'PROC_REA' não encontrada nas colunas disponíveis: {list(df.columns)}")
+                    continue
+
+                # Normaliza e filtra pela lista de procedimentos
+                df["PROC_REA"] = df["PROC_REA"].astype(str).str.strip()
+                antes = len(df)
+                df_filtrado = df[df["PROC_REA"].isin(proc_desejados_str)].copy()
+                depois = len(df_filtrado)
+                escreve_log(f"Filtragem PROC_REA: {antes} -> {depois} registros encontrados.")
+
+                # Salvar resultado
+                if df_filtrado.empty:
+                    escreve_log("Nenhum registro encontrado.")
+                    df.head(0).to_excel(os.path.join(
+                        pasta_saida,
+                        f"SIH_{UF}_{ANO}{MES:02d}_RD_empty.xlsx"
+                    ), index=False)
+                else:
+                    caminho = os.path.join(
+                        pasta_saida,
+                        f"SIH_{UF}_{ANO}{MES:02d}_RD_filtrado.xlsx"
+                    )
+                    df_filtrado.to_excel(caminho, index=False)
+                    escreve_log(f"Arquivo salvo: {caminho} (registros: {len(df_filtrado)})")
+
+                    # Resumo por procedimento (contagem)
+                    resumo = (
+                        df_filtrado["PROC_REA"]
+                        .value_counts()
+                        .rename_axis("PROC_REA")
+                        .reset_index(name="count")
+                        .sort_values("count", ascending=False)
+                    )
+                    caminho_resumo = os.path.join(
+                        pasta_saida,
+                        f"resumo_proc_RD_{UF}_{ANO}{MES:02d}.xlsx"
+                    )
+                    resumo.to_excel(caminho_resumo, index=False)
+                    escreve_log(f"Resumo salvo: {caminho_resumo}")
+
+            except Exception as e:
+                escreve_log(f"Erro no processamento {UF}-{ANO}-{MES:02d}: {e}")
+
+escreve_log("Script finalizado.")
