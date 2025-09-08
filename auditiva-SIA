@@ -5,7 +5,7 @@ import os
 import re
 
 # Escolha da UF, ano e mês
-UF = 'MG'  # Exemplo: 'SP', 'DF', 'MG'...
+UF = ['ac','al','ap','am','ba','ce','df','es','go','ma','mt','ms','mg','pa','pb','pr','pe','pi','rj','rn','rs','ro','rr','sc','sp','se','to']  # Exemplo: 'SP', 'DF', 'MG'...
 ANO = 2025  # Ano desejado
 MES = 4  # Mês desejado (1-12)
 
