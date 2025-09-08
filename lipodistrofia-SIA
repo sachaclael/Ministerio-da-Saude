@@ -4,7 +4,7 @@ from datetime import datetime
 import os
 
 # --------------- CONFIGURAÇÃO ---------------
-UFS = ["MG"]   # <<<<< coloque as UFs desejadas aqui
+UFS = ['ac','al','ap','am','ba','ce','df','es','go','ma','mt','ms','mg','pa','pb','pr','pe','pi','rj','rn','rs','ro','rr','sc','sp','se','to']
 ANO = 2019           # <<<<< altere aqui
 MES = 1              # <<<<< altere aqui
 
