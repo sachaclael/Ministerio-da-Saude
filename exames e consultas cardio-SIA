@@ -4,8 +4,7 @@ from datetime import datetime
 import os
 
 # ---------------- CONFIGURAÇÃO ----------------
-# Edite aqui antes de rodar
-UFS = ["MG"]   # Pode colocar 1 ou várias UFs
+UFS = ['ac','al','ap','am','ba','ce','df','es','go','ma','mt','ms','mg','pa','pb','pr','pe','pi','rj','rn','rs','ro','rr','sc','sp','se','to']   # Pode colocar 1 ou várias UFs
 ANO = 2019                 # Ano desejado
 MES = 1                    # Mês desejado (1 a 12)
 
