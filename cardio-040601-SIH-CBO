@@ -4,7 +4,7 @@ from datetime import datetime
 import os
 
 # --------------- CONFIGURAÇÃO ---------------
-UFS = ["MG"]        # Lista de UFs desejadas
+UFS = ['ac','al','ap','am','ba','ce','df','es','go','ma','mt','ms','mg','pa','pb','pr','pe','pi','rj','rn','rs','ro','rr','sc','sp','se','to']        # Lista de UFs desejadas
 ANOS = [2025]       # Lista de anos
 MESES = [4]         # Lista de meses
 
