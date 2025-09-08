@@ -1,0 +1,90 @@
+from pysus.online_data.SIH import download
+import pandas as pd
+from datetime import datetime
+import os
+
+# --------------- CONFIGURAÇÃO ---------------
+UFS = ["MG"]   # lista de UFs desejadas
+ANOS = [2025]  # lista de anos
+MESES = [4]    # lista de meses
+
+# Procedimento alvo (prefixo)
+PROC_ALVO = "040602"
+# --------------- FIM CONFIGURAÇÃO ---------------
+
+# Criar pasta de saída e log
+hoje = datetime.now()
+pasta_saida = f"SIH_040602_{hoje.strftime('%Y%m%d_%H%M%S')}"
+os.makedirs(pasta_saida, exist_ok=True)
+log_filename = os.path.join(pasta_saida, "log_download.txt")
+
+def escreve_log(msg):
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open(log_filename, "a", encoding="utf-8") as f:
+        f.write(f"[{ts}] {msg}\n")
+    print(f"[{ts}] {msg}")
+
+escreve_log("Início do processo de download do SIH (SP e RD).")
+
+todos_dados = []
+
+for UF in UFS:
+    for ANO in ANOS:
+        for MES in MESES:
+            # 1. SIH SP
+            try:
+                escreve_log(f"Baixando SIH SP para {UF}, {MES:02d}/{ANO}...")
+                sih_sp = download(UF, ANO, MES, "SP")
+                df_sp = sih_sp.to_dataframe()
+                df_sp.columns = [c.upper() for c in df_sp.columns]
+
+                if "SP_PROCREA" not in df_sp.columns:
+                    escreve_log(f"Coluna 'SP_PROCREA' não encontrada no SP. Colunas: {list(df_sp.columns)}")
+                else:
+                    df_sp["SP_PROCREA"] = df_sp["SP_PROCREA"].astype(str).str.strip()
+                    df_filtrado_sp = df_sp[df_sp["SP_PROCREA"].str.startswith(PROC_ALVO)].copy()
+                    escreve_log(f"SP - Filtragem {PROC_ALVO}: {len(df_filtrado_sp)} registros encontrados.")
+
+                    if not df_filtrado_sp.empty:
+                        df_filtrado_sp["UF"] = UF
+                        df_filtrado_sp["ANO"] = ANO
+                        df_filtrado_sp["MES"] = MES
+                        df_filtrado_sp["GRUPO"] = "SP"
+                        todos_dados.append(df_filtrado_sp)
+            except Exception as e:
+                escreve_log(f"Erro SP {UF}-{ANO}-{MES:02d}: {e}")
+
+            # 2. SIH RD
+            try:
+                escreve_log(f"Baixando SIH RD para {UF}, {MES:02d}/{ANO}...")
+                sih_rd = download(UF, ANO, MES, "RD")
+                df_rd = sih_rd.to_dataframe()
+                df_rd.columns = [c.upper() for c in df_rd.columns]
+
+                if "PROC_REA" not in df_rd.columns:
+                    escreve_log(f"Coluna 'PROC_REA' não encontrada no RD. Colunas: {list(df_rd.columns)}")
+                else:
+                    df_rd["PROC_REA"] = df_rd["PROC_REA"].astype(str).str.strip()
+                    df_filtrado_rd = df_rd[df_rd["PROC_REA"].str.startswith(PROC_ALVO)].copy()
+                    escreve_log(f"RD - Filtragem {PROC_ALVO}: {len(df_filtrado_rd)} registros encontrados.")
+
+                    if not df_filtrado_rd.empty:
+                        df_filtrado_rd["UF"] = UF
+                        df_filtrado_rd["ANO"] = ANO
+                        df_filtrado_rd["MES"] = MES
+                        df_filtrado_rd["GRUPO"] = "RD"
+                        todos_dados.append(df_filtrado_rd)
+            except Exception as e:
+                escreve_log(f"Erro RD {UF}-{ANO}-{MES:02d}: {e}")
+
+# Exportar resultados
+if todos_dados:
+    resultado_final = pd.concat(todos_dados, ignore_index=True)
+    caminho_xlsx = os.path.join(pasta_saida, f"SIH_040602_SP_RD_filtrados.xlsx")
+    resultado_final.to_excel(caminho_xlsx, index=False)
+    escreve_log(f"Arquivo final salvo: {caminho_xlsx} (registros: {len(resultado_final)})")
+else:
+    escreve_log("Nenhum registro encontrado para o procedimento informado.")
+    pd.DataFrame().to_excel(os.path.join(pasta_saida, "SIH_040602_empty.xlsx"), index=False)
+
+escreve_log("Script finalizado.")
