@@ -4,10 +4,8 @@ from datetime import datetime
 import os
 import re
 
-# UF desejada
+# Configuração
 UF = ['ac','al','ap','am','ba','ce','df','es','go','ma','mt','ms','mg','pa','pb','pr','pe','pi','rj','rn','rs','ro','rr','sc','sp','se','to']
-
-# Ano e mês
 ano = "2025"
 mes = "04"
 
