@@ -1,0 +1,110 @@
+from pysus.online_data.SIH import download
+import pandas as pd
+from datetime import datetime
+import os
+
+# --------------- CONFIGURAÇÃO ---------------
+UFS = ["MG"]        # Lista de UFs desejadas
+ANOS = [2025]       # Lista de anos
+MESES = [4]         # Lista de meses
+
+# Códigos dos procedimentos principais e secundários
+PROCS_PRINCIPAIS = ["0415010012", "0415020034", "0415030013"]
+PROCS_SECUNDARIOS = ["040601", "040602", "040603", "040604", "040605"]
+
+# Nomes das colunas
+COL_SP_PRINC = "SP_PROCREA"
+COL_RD_PRINC = "PROC_REA"
+COL_SP_SEC   = "SP_ATOPROF"
+# --------------- FIM CONFIGURAÇÃO ---------------
+
+# Criar pasta de saída e log
+hoje = datetime.now()
+pasta_saida = f"SIH_Filtros_{hoje.strftime('%Y%m%d_%H%M%S')}"
+os.makedirs(pasta_saida, exist_ok=True)
+log_filename = os.path.join(pasta_saida, "log_download.txt")
+
+def escreve_log(msg):
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open(log_filename, "a", encoding="utf-8") as f:
+        f.write(f"[{ts}] {msg}\n")
+    print(f"[{ts}] {msg}")
+
+escreve_log("Início do processo de download do SIH (SP e RD).")
+
+todos_dados = []
+
+# Função para aplicar filtros em cada dataset
+def filtrar_dados(df, grupo, col_princ, col_sec=None):
+    df.columns = [c.upper() for c in df.columns]
+    col_princ = col_princ.upper()
+    if col_sec:
+        col_sec = col_sec.upper()
+
+    if col_princ not in df.columns:
+        escreve_log(f"Coluna '{col_princ}' não encontrada em {grupo}. Colunas: {list(df.columns)}")
+        return pd.DataFrame()
+
+    # Padronizar para string
+    df[col_princ] = df[col_princ].astype(str).str.strip()
+    if col_sec and col_sec in df.columns:
+        df[col_sec] = df[col_sec].astype(str).str.strip()
+
+    # Filtro para principais e secundários
+    filtro_princ = df[col_princ].str.startswith(tuple(PROCS_PRINCIPAIS))
+    filtro_sec = df[col_sec].str.startswith(tuple(PROCS_SECUNDARIOS)) if col_sec and col_sec in df.columns else False
+
+    # Registros que atendem pelo menos um filtro
+    df_filtrado = df[filtro_princ | filtro_sec].copy()
+    escreve_log(f"{grupo} - Registros filtrados: {len(df_filtrado)}")
+
+    return df_filtrado
+
+
+# Loop para baixar SP e RD
+for UF in UFS:
+    for ANO in ANOS:
+        for MES in MESES:
+            # SP
+            try:
+                escreve_log(f"Baixando SIH SP para {UF}, {MES:02d}/{ANO}...")
+                sih_sp = download(UF, ANO, MES, "SP")
+                df_sp = sih_sp.to_dataframe()
+                df_filtrado_sp = filtrar_dados(df_sp, "SP", COL_SP_PRINC, COL_SP_SEC)
+
+                if not df_filtrado_sp.empty:
+                    df_filtrado_sp["UF"] = UF
+                    df_filtrado_sp["ANO"] = ANO
+                    df_filtrado_sp["MES"] = MES
+                    df_filtrado_sp["GRUPO"] = "SP"
+                    todos_dados.append(df_filtrado_sp)
+            except Exception as e:
+                escreve_log(f"Erro SP {UF}-{ANO}-{MES:02d}: {e}")
+
+            # RD
+            try:
+                escreve_log(f"Baixando SIH RD para {UF}, {MES:02d}/{ANO}...")
+                sih_rd = download(UF, ANO, MES, "RD")
+                df_rd = sih_rd.to_dataframe()
+                df_filtrado_rd = filtrar_dados(df_rd, "RD", COL_RD_PRINC)
+
+                if not df_filtrado_rd.empty:
+                    df_filtrado_rd["UF"] = UF
+                    df_filtrado_rd["ANO"] = ANO
+                    df_filtrado_rd["MES"] = MES
+                    df_filtrado_rd["GRUPO"] = "RD"
+                    todos_dados.append(df_filtrado_rd)
+            except Exception as e:
+                escreve_log(f"Erro RD {UF}-{ANO}-{MES:02d}: {e}")
+
+# Exportar resultados
+if todos_dados:
+    resultado_final = pd.concat(todos_dados, ignore_index=True)
+    caminho_xlsx = os.path.join(pasta_saida, f"SIH_SP_RD_filtrados.xlsx")
+    resultado_final.to_excel(caminho_xlsx, index=False)
+    escreve_log(f"Arquivo final salvo: {caminho_xlsx} (registros: {len(resultado_final)})")
+else:
+    escreve_log("Nenhum registro encontrado para os filtros informados.")
+    pd.DataFrame().to_excel(os.path.join(pasta_saida, "SIH_empty.xlsx"), index=False)
+
+escreve_log("Script finalizado.")
