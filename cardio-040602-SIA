@@ -1,0 +1,102 @@
+from pysus.online_data.SIA import download
+import pandas as pd
+from datetime import datetime
+import os
+
+# ---------------- CONFIGURAÇÃO (edite aqui) ----------------
+UFS = ["MG"]                       # lista de UFs (ex: ["MG","SP"])
+ANO = 2025                         # ano
+MES = 4                            # mês (1-12)
+
+# Procedimentos: altere aqui facilmente
+PROCEDIMENTOS = ["040602", "040603", "040604", "040605"]
+
+# Modo de correspondência:
+# "prefix" -> procura PA_PROC_ID que começam com qualquer item de PROCEDIMENTOS
+# "exact"  -> procura igualdade exata (use se tiver os códigos completos)
+MATCH_MODE = "prefix"
+# ---------------- FIM CONFIGURAÇÃO ----------------
+
+hoje = datetime.now()
+pasta_saida = f"SIA_{'_'.join(UFS)}_{ANO}{MES:02d}_{hoje.strftime('%Y%m%d_%H%M%S')}"
+os.makedirs(pasta_saida, exist_ok=True)
+log_filename = os.path.join(pasta_saida, "log_download.txt")
+
+def escreve_log(msg):
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open(log_filename, "a", encoding="utf-8") as f:
+        f.write(f"[{ts}] {msg}\n")
+    print(f"[{ts}] {msg}")
+
+escreve_log("Início do processo de download do SIA (PA).")
+
+try:
+    dfs = []
+
+    for UF in UFS:
+        escreve_log(f"--- Processando UF={UF} ---")
+        try:
+            arquivos = download(UF, ANO, MES, groups=["PA"])
+
+            # garante lista caso pysus retorne um único objeto
+            if not isinstance(arquivos, (list, tuple)):
+                arquivos = [arquivos]
+
+            for arquivo in arquivos:
+                try:
+                    df = arquivo.to_dataframe()
+                except Exception as e:
+                    escreve_log(f"Erro ao converter arquivo para DataFrame (UF={UF}): {e}")
+                    continue
+
+                # identifica coluna de procedimento (prefere PA_PROC_ID)
+                if "PA_PROC_ID" in df.columns:
+                    proc_col = "PA_PROC_ID"
+                else:
+                    cols_map = {c.upper(): c for c in df.columns}
+                    candidatos = [orig for up, orig in cols_map.items() if "PROC" in up]
+                    proc_col = candidatos[0] if candidatos else None
+
+                if not proc_col:
+                    escreve_log(f"UF={UF}: nenhuma coluna de procedimento encontrada. Colunas: {list(df.columns)}")
+                    continue
+
+                # normaliza
+                df[proc_col] = df[proc_col].astype(str).str.strip()
+
+                # aplica filtro por procedimento (prefixo ou exato)
+                if MATCH_MODE == "prefix":
+                    prefixes = tuple(PROCEDIMENTOS)
+                    mask = df[proc_col].notna() & df[proc_col].str.startswith(prefixes)
+                else:  # exact
+                    mask = df[proc_col].isin(PROCEDIMENTOS)
+
+                df_filtrado = df[mask].copy()
+                if not df_filtrado.empty:
+                    # adiciona coluna UF para rastrear origem
+                    df_filtrado["UF"] = UF
+                    dfs.append(df_filtrado)
+                    escreve_log(f"UF={UF}: {len(df_filtrado)} registros filtrados neste arquivo.")
+                else:
+                    escreve_log(f"UF={UF}: 0 registros filtrados neste arquivo.")
+
+        except Exception as e:
+            escreve_log(f"Erro ao processar UF={UF}: {e}")
+
+    # consolida tudo
+    dados_filtrados = pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
+    escreve_log(f"Total geral de registros filtrados: {len(dados_filtrados)}")
+
+    # salva Excel único
+    if dados_filtrados.empty:
+        escreve_log("Nenhum registro encontrado com os filtros informados.")
+        dados_filtrados.head(0).to_excel(os.path.join(pasta_saida, f"SIA_{'_'.join(UFS)}_{ANO}{MES:02d}_empty.xlsx"), index=False)
+    else:
+        caminho = os.path.join(pasta_saida, f"SIA_{'_'.join(UFS)}_{ANO}{MES:02d}_procedimentos_filtrados.xlsx")
+        dados_filtrados.to_excel(caminho, index=False)
+        escreve_log(f"Arquivo salvo: {caminho} (registros: {len(dados_filtrados)})")
+
+except Exception as e:
+    escreve_log(f"Erro geral no processamento: {e}")
+
+escreve_log("Script finalizado.")
