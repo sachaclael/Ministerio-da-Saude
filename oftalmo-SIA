@@ -41,9 +41,9 @@ dados_por_grupo = {}
 
 for grupo in grupos:
     try:
-        df = download(UF, ano, mes, grupo)
-        df["ano"] = int(ano)
-        df["mes"] = int(mes)
+        df = download(UF, ANO, MES, grupo)
+        df["ANO"] = int(ANO)
+        df["MES"] = int(MES)
         df["grupo"] = grupo
 
         # Identificar coluna de procedimento (varia entre grupos)
@@ -60,7 +60,7 @@ for grupo in grupos:
 
 # Salvar em Excel com múltiplas abas
 if dados_por_grupo:
-    arquivo_excel = f"SIA_{UF}_{ano}_{mes}.xlsx"
+    arquivo_excel = f"SIA_{UF}_{ANO}_{MES}.xlsx"
     with pd.ExcelWriter(arquivo_excel, engine="openpyxl") as writer:
         for grupo, df in dados_por_grupo.items():
             df.to_excel(writer, sheet_name=grupo, index=False)
