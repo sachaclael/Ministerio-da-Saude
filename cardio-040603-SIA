@@ -5,8 +5,8 @@ import os
 
 # ---------------- CONFIGURAÇÃO (edite aqui) ----------------
 UFS = ['ac','al','ap','am','ba','ce','df','es','go','ma','mt','ms','mg','pa','pb','pr','pe','pi','rj','rn','rs','ro','rr','sc','sp','se','to']                      # lista de UFs (ex: ["MG","SP"])
-ANO = 2025                         # ano
-MES = 4                            # mês (1-12)
+ANO = [2008, 2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025]
+MES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
 
 # Procedimentos: altere aqui facilmente
 PROCEDIMENTOS = ["040602", "040603", "040604", "040605"]
